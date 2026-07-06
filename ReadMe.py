@@ -1,3 +1,4 @@
+# First time to pull the project:
 '''
 mkdir -p ~/Desktop/ROS2_WS
 cd ~/Desktop/ROS2_WS
