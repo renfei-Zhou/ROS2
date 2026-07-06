@@ -1,0 +1,221 @@
+import rclpy
+from rclpy.node import Node
+from example_interfaces.msg import String
+import random
+import time
+
+
+
+class GameMasterNode(Node): # MODIFY NAME
+
+    def __init__(self):
+        super().__init__("game_master") # MODIFY NAME
+        self.players_ready_ = []
+        self.player_states_ = {} 
+        self.player_roles_ = {}    
+        self.player_action_ = {} 
+        self.wolf_action_ = {} 
+        self.dead_players_ = []
+        self.votes_ = {}
+
+        self.roles_assigned_ = False
+        self.game_phase_ = "waiting"  # can be 'waiting', 'night', 'day', 'end'
+        self.roles_ = ['villager','villager','villager','villager','wolf'] # ['villager','villager','wolf','wolf','witch','perdictor']
+        self.ready_sub_ = self.create_subscription(String, 'player_ready', self.player_ready_callback, 10) # topic name
+        self.roles_pub_ = self.create_publisher(String, 'assign_role', 10)
+        # night actions
+        self.night_start_pub_ = self.create_publisher(String, 'night_start', 10)
+        self.wolf_action_sub_ = self.create_subscription(String, 'wolf_action', self.wolf_action_callback, 10)
+
+        # day actions
+        self.dead_pub_ = self.create_publisher(String, 'dead', 10)
+        self.day_vote_start_pub_ = self.create_publisher(String, 'day_vote', 10)
+        self.vote_result_sub_ = self.create_subscription(String, 'vote_result', self.vote_result_callback, 10)
+
+        self.get_logger().info("WOLF GAME (5 players)")
+        self.get_logger().info("4 villagers, 1 wolf")
+             
+    ### Step1: players ready
+    def player_ready_callback(self, msg):
+        player_name = msg.data
+        if player_name not in self.players_ready_:
+            self.players_ready_.append(player_name)
+            self.get_logger().info(f"{player_name} is ready")
+        # Assign roles when all 5 players are ready
+        if len(self.players_ready_) == 5 and not self.roles_assigned_:
+            self.assign_rloe()
+            self.roles_assigned_ = True
+            # start of night actions, this will also triggered only once HERE
+            time.sleep(1)
+            self.start_night_phase()
+            
+
+    def assign_rloe(self):
+        random.shuffle(self.roles_)
+        for player, role in zip(self.players_ready_, self.roles_):
+            msg = String()
+            msg.data = f"{player}:{role}"
+            self.roles_pub_.publish(msg)
+        
+            # Store player states
+            self.player_roles_[player] = role
+            self.player_states_[player] = 'alive'
+
+            # Initialize night action
+            if role == "villager":
+                self.player_action_[player] = "done"  # villagers have no night action
+            else:
+                self.player_action_[player] = None    # non-villagers need to act
+
+        self.get_logger().info(f"All 5 players ready. Roles are assigned.")
+
+    ### Step2: night actions
+    def start_night_phase(self):
+        self.game_phase_ = "night"
+        # self.night_done_players_.clear()
+        for i in range(3,0,-1):
+            msg = String()
+            msg.data = f"Night start in {i} s"
+            self.night_start_pub_.publish(msg)
+            self.get_logger().info(msg.data)
+            time.sleep(1)
+        
+        msg = String()
+        msg.data = "🌙 Night phase begins!"
+        self.night_start_pub_.publish(msg)
+        self.get_logger().info(msg.data)
+        self.get_logger().info("🐺 Wolf action...")
+
+    def wolf_action_callback(self, msg):
+        voter, target = msg.data.split(':')[0], msg.data.split(':')[1].split(',')[0]
+
+        # Store wolf vote
+        self.wolf_action_[voter] = target
+        # Mark wolf action as done
+        self.player_action_[voter] = "done"
+        self.get_logger().info(f"done")
+        time.sleep(2)
+
+        # Mark target player as dead
+        self.player_states_[f"player{target}"] = 'dead'
+        
+        # Check if all night actions are done
+        self.night_done()
+
+
+    def night_done(self):     
+        if all(action is not None for action in self.player_action_.values()):   
+            self.get_logger().info("🌞 Night actions complete. Starting day phase...")
+            time.sleep(2)
+            self.start_day_phase()
+        
+
+
+    ### Step3: day actions
+    def start_day_phase(self):
+        self.game_phase_ = "day"
+
+        # Record dead players
+        # Keep a list of players who were already dead
+        previous_dead = getattr(self, 'previous_dead_', set())
+        # Current dead players
+        dead_players = {player for player, state in self.player_states_.items() if state == 'dead'}
+        # Players who just died last night
+        newly_dead_player = dead_players - previous_dead
+        # Update the previous_dead set
+        self.previous_dead_ = dead_players
+
+        if newly_dead_player:
+            self.get_logger().info(f"💀 {', '.join(newly_dead_player)} is killed")
+        else:
+            self.get_logger().info("🟢 No one died last night")
+        
+
+        # publish dead players
+        for player in newly_dead_player:
+            msg = String()
+            msg.data = player
+            self.dead_pub_.publish(msg)
+            # small delay to ensure messages are sent
+            time.sleep(2)
+        
+
+        # List alive players
+        self.alive_players = [player for player, state in self.player_states_.items() if state == 'alive']
+        self.get_logger().info(f"🟢 {', '.join(self.alive_players)} alive")
+        time.sleep(2)
+
+        # Count alive wolves and humans
+        alive_wolves = [p for p in self.alive_players if self.player_roles_[p] == "wolf"]
+        alive_humans = [p for p in self.alive_players if self.player_roles_[p] != "wolf"]
+
+        # Check game end conditions
+        if len(alive_wolves) >= len(alive_humans):
+            self.get_logger().info("🐺 Wolves win! 🐺 Game over 🐺")
+            self.game_phase_ = "end"
+            return
+        elif len(alive_wolves) == 0:
+            self.get_logger().info("🏠 Humans win! 🏠 Game over 🏠")
+            self.game_phase_ = "end"
+            return
+        else:
+            self.get_logger().info("Game continues...")
+            time.sleep(2)
+
+        ### vote phase
+        self.start_day_vote()
+
+
+    def start_day_vote(self):
+        if self.game_phase_ == "end":
+            return
+        
+        self.get_logger().info("Day vote start. Choose a player...")
+
+        # publish alive player msg to vote
+        alive_list_str = ', '.join(self.alive_players)
+
+        msg = String()
+        msg.data = f"Choose a player from: {alive_list_str}"
+        self.day_vote_start_pub_.publish(msg)
+
+        
+    def vote_result_callback(self, msg):
+        if self.game_phase_ == "end":
+            return
+        
+        voter, target = msg.data.split(':')
+
+        # Store the vote
+        self.get_logger().info(f"🗳️ {voter} has voted")
+        self.player_action_[voter] = "voted"
+        self.votes_[voter] = target
+
+        # Check if all alive players have voted
+        alive_players = [p for p, state in self.player_states_.items() if state == 'alive']
+        if all(p in self.votes_ for p in alive_players):
+            self.get_logger().info("✅ All players have voted. Counting votes...")
+            time.sleep(3)
+            self.count_votes()
+            
+
+    def count_votes(self):
+        if self.game_phase_ == "end":
+            return
+        
+
+
+
+        # Start next night
+        self.start_night_phase()
+        
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = GameMasterNode() # MODIFY NAME
+    rclpy.spin(node)
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
