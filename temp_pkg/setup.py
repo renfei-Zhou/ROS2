@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'L01_first_publisher'
+package_name = 'temp_pkg'
 
 setup(
     name=package_name,
@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'robot_news_station = L01_first_publisher.robot_news_station:main'
+            'temp_node = temp_pkg.temp_node:main'
         ],
     },
 )

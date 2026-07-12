@@ -20,7 +20,7 @@ NODE_CLASS_NAME  Python类名   代码里 class NODE_CLASS_NAME(Node)
 make sure in setup.py: 'EXEC_NAME = PACKAGE_NAME.FILE_NAME:main'
 '''
 
-
+# -------------------------------------------------------------------
 # Step1. Create a new package
 '''
 dir cd = src
@@ -70,4 +70,17 @@ source install/setup.bash    # ← 新建包/新建工作空间后必须；已�
 ros2 run PACKAGE_NAME EXEC_NAME   # EXEC_NAME = setup.py 入口点等号左边那个名字
 '''
 
-# 
+# ---------------------------------------------------
+# Check current running nodes
+'''
+ros2 node list
+
+Check detail: ros2 node info /robot_news_station
+'''
+
+# Check current running topics
+'''
+ros2 topic list
+
+Check content in current topic: ros2 topic echo /robot_news
+'''
