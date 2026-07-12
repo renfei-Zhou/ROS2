@@ -11,9 +11,9 @@ source ~/.bashrc
 
 # Important parameter name and dir
 '''
-PACKAGE_NAME     包名          pkg create 的参数；ros2 run 第一个参数
+PACKAGE_NAME     包名          pkg create 的参数 [ros2 run 第一个参数]
 FILE_NAME        文件名        模块文件 FILE_NAME.py
-EXEC_NAME        可执行名      entry_points 等号左边；ros2 run 第二个参数
+EXEC_NAME        可执行名      entry_points 等号左边 [ros2 run 第二个参数]
 NODE_NAME        ROS节点名     代码里 super().__init__("NODE_NAME")
 NODE_CLASS_NAME  Python类名   代码里 class NODE_CLASS_NAME(Node)
 
